@@ -12,13 +12,11 @@ package da_project;
 import java.io.IOException;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.Mapper;
 import org.apache.hadoop.mapreduce.Reducer;
-import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.hadoop.util.GenericOptionsParser;
 
@@ -34,36 +32,42 @@ public class DA_Project {
         j.setJarByClass(DA_Project.class);
         j.setMapperClass(SemanticMapper.class);
         j.setReducerClass(SemanticReducer.class);
-        j.setOutputKeyClass(Text.class);
-        j.setOutputValueClass(IntWritable.class);
+        j.setOutputKeyClass(LongWritable.class);
+        j.setOutputValueClass(Text.class);
         FileTextInputFormat.addInputPath(j, input);
         FileOutputFormat.setOutputPath(j, output);
         System.exit(j.waitForCompletion(true)?0:1);
     }
 
-    public static class SemanticMapper extends Mapper<LongWritable, Text, Text, IntWritable> {
+    public static class SemanticMapper extends Mapper<LongWritable, Text, LongWritable, Text> {
 
         public void map(LongWritable key, Text value, Context con) throws IOException, InterruptedException {
 
-            String line = value.toString();
-            String[] words=line.split(",");
+            String text = value.toString();
+            String[] words= text.split(" ");
+            StopWords stopWords = new StopWords();
             for(String word: words ) {
-                Text outputKey = new Text(word.toUpperCase().trim());
-                IntWritable outputValue = new IntWritable(1);
+                if(stopWords.isStopWord(word))
+                    continue;
+                word = word.replaceAll("\\W+","");
+                if(word.equals(""))
+                    continue;
+                LongWritable outputKey = key;
+                Text outputValue = new Text(word.toLowerCase().trim());
                 con.write(outputKey, outputValue);
             }
         }
     }
 
-    public static class SemanticReducer extends Reducer<Text, IntWritable, Text, IntWritable> {
+    public static class SemanticReducer extends Reducer<LongWritable, Text, Text, Text> {
 
-        public void reduce(Text word, Iterable<IntWritable> values, Context con) throws IOException, InterruptedException {
+        public void reduce(LongWritable docid, Iterable<Text> values, Context con) throws IOException, InterruptedException {
         
-            int sum = 0;
-            for(IntWritable value : values) {
-                sum += value.get();
+            String tokens = "";
+            for(Text value : values) {
+                tokens += value.toString() + ",";
             }
-            con.write(word, new IntWritable(sum));
+            con.write(new Text(String.valueOf(docid.get())), new Text(tokens));
 
         }
 
